@@ -1,4 +1,17 @@
 {
-  "dates": [],
-  "trend": []
+  "dates": [
+    "2026-11-19"
+  ],
+  "trend": [
+    {
+      "date": "2026-11-19",
+      "up": 22,
+      "down": 67,
+      "broken": 20,
+      "first": 17,
+      "second": 2,
+      "third_plus": 3,
+      "max_streak": 3
+    }
+  ]
 }
