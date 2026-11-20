@@ -159,7 +159,7 @@ def snapshots():
     history = DATA / 'history'
     files = sorted(history.glob('????-??-??.json'), reverse=True)
     result = []
-    for p in files[:60]:
+    for p in files:
         try:
             d = json.loads(p.read_text(encoding='utf-8'))
             if d.get('status') == 'verified':
@@ -242,7 +242,18 @@ def run():
     }
     # 先保存快照，再生成可选择的历史索引。
     atomic_json(DATA/'history'/f'{day.isoformat()}.json',payload)
-    atomic_json(DATA/'latest.json',payload)
+    # 历史补录不得覆盖较新的主页面快照。
+    latest_path = DATA/'latest.json'
+    latest_day = ''
+    if latest_path.exists():
+        try:
+            latest_day = str(json.loads(latest_path.read_text(encoding='utf-8')).get('date',''))
+        except (OSError, ValueError):
+            latest_day = ''
+    if not latest_day or day.isoformat() >= latest_day:
+        atomic_json(latest_path,payload)
+    else:
+        LOG.info('历史数据 %s 已归档，主页继续显示 %s', day, latest_day)
     atomic_json(DATA/'history_index.json',{'dates':[p['date'] for p in snapshots()], 'trend':snapshots()})
     LOG.info('数据更新成功：%s 涨停=%d 跌停=%d 炸板=%s',day,len(ups),len(downs),len(broken) if broken_df is not None else '缺失')
 
