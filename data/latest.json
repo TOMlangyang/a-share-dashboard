@@ -2,7 +2,7 @@
   "schema_version": 1,
   "status": "verified",
   "date": "2026-11-19",
-  "updated_at": "2026-11-20T10:33:52+08:00",
+  "updated_at": "2026-11-20T10:42:55+08:00",
   "market_scope": "仅沪深主板普通A股，排除全部ST/创业板/科创板/北交所/停牌等",
   "source": "AKShare/东方财富涨跌停池；可选财联社/开盘红市场原因",
   "notes": [
