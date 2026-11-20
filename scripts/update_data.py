@@ -149,7 +149,7 @@ def enrich_reasons(ups, day):
 
 def trade_day_checked(day):
     import akshare as ak
-    dates = ak.tool_trade_date_hist_sina()
+    dates = (ak.calendar_trade_date_hist_sina() if hasattr(ak, 'calendar_trade_date_hist_sina') else ak.tool_trade_date_hist_sina())
     if dates is None or dates.empty or 'trade_date' not in dates.columns:
         raise RuntimeError('交易日历核验失败，不使用简单工作日代替')
     return day.isoformat() in set(dates.trade_date.astype(str).str[:10])
@@ -190,7 +190,7 @@ def run():
         if not trade_day_checked(day):
             raise RuntimeError('TRADE_DATE 非交易日')
     else:
-        calendar = ak.tool_trade_date_hist_sina()
+        calendar = (ak.calendar_trade_date_hist_sina() if hasattr(ak, 'calendar_trade_date_hist_sina') else ak.tool_trade_date_hist_sina())
         if calendar is None or calendar.empty or 'trade_date' not in calendar.columns:
             raise RuntimeError('无法核实交易日历，拒绝自动推断')
         tradable_dates = [
