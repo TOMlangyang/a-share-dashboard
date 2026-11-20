@@ -152,7 +152,7 @@ table{border-collapse:collapse;width:100%;white-space:nowrap;text-align:left}the
     <div class="side-bottom"><div class="scope-note"><strong><span class="dot"></span>仅沪深主板普通A股</strong>不含创业板、科创板、北交所、ST及退市风险股票。每日收盘后更新。</div></div>
   </aside>
   <main>
-    <header class="topbar" id="overview"><div><div class="eyebrow">DAILY LIMIT BOARD MONITOR</div><h1 class="main-title">A股涨跌停 · 全景监测</h1><div class="subtitle">沪深主板专属 · 涨停逻辑 · 连板梯队 · 板块资金情绪</div></div><div class="top-controls"><select class="date-select" id="dateSelect" aria-label="历史交易日"><option value="latest">最近交易日</option></select><button class="btn" id="exportBtn">⇩ 导出表格</button><button class="btn main" id="refreshBtn">↻ 刷新数据</button></div></header>
+    <header class="topbar" id="overview"><div><div class="eyebrow">DAILY LIMIT BOARD MONITOR</div><h1 class="main-title">A股涨跌停 · 全景监测</h1><div class="subtitle">沪深主板专属 · 涨停逻辑 · 连板梯队 · 板块资金情绪</div></div><div class="top-controls"><select class="date-select" id="dateSelect" aria-label="历史交易日"><option value="latest">最近交易日</option></select><input type="date" id="historyDate" aria-label="查询已归档日期" title="按年月日查询历史数据"><button class="btn" id="historyLookup">查找历史</button><button class="btn" id="exportBtn">⇩ 导出表格</button><button class="btn main" id="refreshBtn">↻ 刷新数据</button></div></header>
     <div id="notice" class="notice demo"><span>◉</span><span id="noticeText">正在读取数据……</span><span id="dataTime" class="meta-right"></span></div>
     <section class="kpis">
       <div class="kpi"><div class="head">收盘涨停<b style="color:var(--red)">↗</b></div><div class="value red" id="upCount">—</div><div class="foot">仅可交易沪深主板普通股</div></div>
@@ -178,7 +178,7 @@ table{border-collapse:collapse;width:100%;white-space:nowrap;text-align:left}the
 'use strict';
 const $=id=>document.getElementById(id);
 // 无有效收盘快照时展示空状态，而非虚构股票。
-let DATA={schema_version:1,status:'unavailable',date:'—',summary:{up:null,down:null,broken:null,first:null,second:null,third_plus:null,max_streak:null},stocks:{up:[],down:[],broken:[]},sectors:[],notes:['数据抓取尚未成功，网页不会展示虚构股票。']}, HISTORY=[], STATE={tab:'up',query:'',stage:'all',sector:'all',page:1,pageSize:15};
+let AVAILABLE_DATES=[], DATA={schema_version:1,status:'unavailable',date:'—',summary:{up:null,down:null,broken:null,first:null,second:null,third_plus:null,max_streak:null},stocks:{up:[],down:[],broken:[]},sectors:[],notes:['数据抓取尚未成功，网页不会展示虚构股票。']}, HISTORY=[], STATE={tab:'up',query:'',stage:'all',sector:'all',page:1,pageSize:15};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function fmtNum(n){return typeof n==='number'&&Number.isFinite(n)?n.toLocaleString('zh-CN',{maximumFractionDigits:2}):'—'}
 function beijingToday(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}
@@ -207,7 +207,7 @@ function jump(tab){selectTab(tab);$('listPanel').scrollIntoView({behavior:'smoot
 function selectTab(tab){STATE.tab=tab;STATE.stage='all';STATE.sector='all';STATE.page=1;$('stage').value='all';document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));sectorOptions();renderTable()}
 function downloadCSV(){const rows=visibleRows();const cols=[['代码','code'],['名称','name'],['收盘价','price'],['涨跌幅%','pct'],['板数','streak'],['N天','n_days'],['M板','m_boards'],['所属行业','industry'],['细分题材','sector'],['首次封板','first_time'],['最终封板','last_time'],['涨跌停原因','reason'],['核实等级','reason_level'],['来源','reason_source']];let csv=[cols.map(x=>x[0]),...rows.map(r=>cols.map(x=>r[x[1]]??''))].map(c=>c.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');let blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`沪深主板_${DATA.date}_${STATE.tab}${DATA.status==='verified'?'':'_空数据'}.csv`;a.click();URL.revokeObjectURL(a.href)}
 async function loadData(force=false,archive='latest'){let file=archive==='latest'?'data/latest.json':`data/history/${encodeURIComponent(archive)}.json`;try{let res=await fetch(file+'?v='+(force?Date.now():Math.floor(Date.now()/180000)),{cache:'no-store'});if(!res.ok)throw Error('HTTP '+res.status);let obj=await res.json();if(obj.schema_version!==1||obj.status!=='verified'||!obj.stocks||!obj.summary)throw Error('数据格式错误或未核验');DATA=obj;STATE.page=1;render()}catch(e){if(archive==='latest'){render();console.warn('真实行情数据暂不可用:',e.message)}else{alert('读取历史快照失败，已保留当前数据：'+e.message)}}}
-async function loadHistory(){try{let r=await fetch('data/history_index.json?v='+Date.now(),{cache:'no-store'});if(!r.ok)return;let obj=await r.json();HISTORY=obj.trend||[];let dates=obj.dates||[];$('dateSelect').innerHTML='<option value="latest">最近交易日</option>'+dates.map(d=>`<option value="${esc(d)}">${esc(d)}</option>`).join('');renderTrend()}catch(e){console.info('尚无历史数据',e.message)}}
+async function loadHistory(){try{let r=await fetch('data/history_index.json?v='+Date.now(),{cache:'no-store'});if(!r.ok)return;let obj=await r.json();HISTORY=obj.trend||[];let dates=(obj.dates||[]).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d));AVAILABLE_DATES=dates;let months={};for(const d of dates){const month=d.slice(0,7);(months[month]??=[]).push(d)}$('dateSelect').innerHTML='<option value="latest">最近交易日</option>'+Object.entries(months).map(([m,items])=>'<optgroup label="'+esc(m)+' · '+items.length+'天">'+items.map(d=>'<option value="'+esc(d)+'">'+esc(d)+'</option>').join('')+'</optgroup>').join('');$('historyDate').max=dates[0]||'';$('historyDate').min=dates.at(-1)||'';renderTrend()}catch(e){console.info('尚无历史数据',e.message)}}
 document.querySelectorAll('.tab').forEach(x=>x.addEventListener('click',()=>selectTab(x.dataset.tab)));
 $('tbody').addEventListener('click',e=>{let tr=e.target.closest('tr[data-code]');if(tr)openStock(tr.dataset.code)});
 $('search').addEventListener('input',e=>{STATE.query=e.target.value.trim();STATE.page=1;renderTable()});
@@ -216,7 +216,8 @@ $('sector').addEventListener('change',e=>{STATE.sector=e.target.value;STATE.page
 $('prev').addEventListener('click',()=>{STATE.page--;renderTable()});$('next').addEventListener('click',()=>{STATE.page++;renderTable()});
 $('exportBtn').addEventListener('click',downloadCSV);
 $('refreshBtn').addEventListener('click',async()=>{const b=$('refreshBtn');b.textContent='⟳ 加载中';await loadData(true,$('dateSelect').value);b.textContent='↻ 刷新数据';await loadHistory()});
-$('dateSelect').addEventListener('change',e=>loadData(true,e.target.value));
+$('historyLookup').addEventListener('click',async()=>{const d=$('historyDate').value;if(!d){alert('请先选择历史日期');return}if(!AVAILABLE_DATES.includes(d)){alert('这一天尚无成功归档的行情数据。仅已采集的交易日可以查看，历史回补失败的日期不会生成虚构数据。');return}$('dateSelect').value=d;await loadData(true,d)});
+$('dateSelect').addEventListener('change',e=>{if(e.target.value!=='latest')$('historyDate').value=e.target.value;loadData(true,e.target.value)});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrawer()});
 render();loadData();loadHistory();
 </script>
