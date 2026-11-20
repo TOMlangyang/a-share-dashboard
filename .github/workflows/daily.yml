@@ -1,0 +1,79 @@
+name: 每日收盘数据与看板部署
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'requirements.txt'
+      - 'scripts/**'
+      - '.github/workflows/daily.yml'
+  schedule:
+    - cron: '40 17 * * 1-5'
+      timezone: 'Asia/Shanghai'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: a-share-daily-pages
+  cancel-in-progress: false
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: 配置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+      - name: 测试数据筛选逻辑
+        run: python scripts/test_update_data.py
+      - name: 安装可选涨停原因来源
+        run: pip install levistock || echo "可选原因插件不可用，原因标记待核实"
+      - name: 抓取交易日涨跌停
+        id: ingest
+        continue-on-error: true
+        run: python scripts/update_data.py
+      - name: 记录行情抓取失败
+        if: steps.ingest.outcome == 'failure'
+        run: echo "行情更新失败，保留上一次成功快照；网页仍然部署，不伪造数据。" >> "$GITHUB_STEP_SUMMARY"
+      - name: 提交行情快照
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A data
+          if ! git diff --cached --quiet; then
+            git commit -m "data: refresh after close"
+            git push
+          fi
+      - name: 配置 Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: 生成网页目录
+        run: |
+          mkdir -p dist
+          cp index.html dist/index.html
+          cp -r data dist/data
+          touch dist/.nojekyll
+      - name: 上传 Pages 静态文件
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - name: 发布 Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
