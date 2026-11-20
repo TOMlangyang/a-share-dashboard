@@ -7,7 +7,7 @@ import os
 import re
 import sys
 from collections import Counter
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -180,15 +180,28 @@ def run():
     logging.basicConfig(level=logging.INFO,format='%(asctime)s %(levelname)s %(message)s')
     import akshare as ak
     now = datetime.now(TZ)
-    day = date.fromisoformat(os.environ['TRADE_DATE']) if os.environ.get('TRADE_DATE') else now.date()
-    if day > now.date():
-        raise RuntimeError('不能发布未来交易日数据')
-    if day == now.date() and now.time() < time(16,0):
-        LOG.info('尚未到收盘数据稳定时点，不更新')
-        return
-    if not trade_day_checked(day):
-        LOG.info('%s 为非交易日，保留最近已成功交易日数据',day)
-        return
+    # 首次安装和盘前部署也应该显示最近一个已收盘交易日，不使用演示样本。
+    # 显式 TRADE_DATE 可用于历史回补，但禁止使用未来或未收盘的数据。
+    cutoff = now.date() if now.time() >= time(16,0) else now.date() - timedelta(days=1)
+    if os.environ.get('TRADE_DATE'):
+        day = date.fromisoformat(os.environ['TRADE_DATE'])
+        if day > cutoff:
+            raise RuntimeError('TRADE_DATE 尚未到收盘可核实时间，拒绝发布')
+        if not trade_day_checked(day):
+            raise RuntimeError('TRADE_DATE 非交易日')
+    else:
+        calendar = ak.tool_trade_date_hist_sina()
+        if calendar is None or calendar.empty or 'trade_date' not in calendar.columns:
+            raise RuntimeError('无法核实交易日历，拒绝自动推断')
+        tradable_dates = [
+            date.fromisoformat(str(x)[:10]) for x in calendar.trade_date
+            if str(x)[:10] <= cutoff.isoformat()
+        ]
+        if not tradable_dates:
+            raise RuntimeError('交易日历无有效的已收盘交易日')
+        day = max(tradable_dates)
+    LOG.info('最新可发布收盘交易日为 %s；当前北京时间 %s', day, now.isoformat(timespec='seconds'))
+    # 已保存的同日快照不必重新拉取；每日16点之后仍会运行一次正式更新。
     stamp = day.strftime('%Y%m%d')
     # 主要来源全部成功后才入库，杜绝只抓到一部分就发布。
     up_df = validate_pool(ak.stock_zt_pool_em(date=stamp),'涨停池')
