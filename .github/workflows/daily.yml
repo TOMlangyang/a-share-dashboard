@@ -2,6 +2,17 @@ name: 每日收盘数据与看板部署
 
 on:
   workflow_dispatch:
+    inputs:
+      start_date:
+        description: '历史回补开始日期 YYYY-MM-DD'
+        required: false
+        default: '2026-11-03'
+        type: string
+      end_date:
+        description: '历史回补结束日期 YYYY-MM-DD'
+        required: false
+        default: '2026-11-18'
+        type: string
   push:
     branches: [main]
     paths:
@@ -44,6 +55,22 @@ jobs:
         run: python scripts/test_update_data.py
       - name: 安装可选涨停原因来源
         run: pip install levistock || echo "可选原因插件不可用，原因标记待核实"
+      - name: 首次补录11月历史交易日
+        if: github.event_name == 'push'
+        id: backfill
+        continue-on-error: true
+        run: python scripts/backfill_history.py --start 2026-11-03 --end 2026-11-18 --limit 30
+      - name: 手工指定历史回补范围
+        if: github.event_name == 'workflow_dispatch'
+        id: manual_backfill
+        continue-on-error: true
+        env:
+          HISTORY_START: ${{ inputs.start_date }}
+          HISTORY_END: ${{ inputs.end_date }}
+        run: python scripts/backfill_history.py --start "$HISTORY_START" --end "$HISTORY_END" --limit 30
+      - name: 标记部分历史回补失败
+        if: steps.backfill.outcome == 'failure' || steps.manual_backfill.outcome == 'failure'
+        run: echo "历史回补部分日期失败：已保留成功存档，未获取的日期不在网页中显示。" >> "$GITHUB_STEP_SUMMARY"
       - name: 抓取交易日涨跌停
         id: ingest
         continue-on-error: true
